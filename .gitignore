@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+.vscode/
+data/raw_filings/*
+data/processed/*
+!data/raw_filings/.gitkeep
+!data/processed/.gitkeep
