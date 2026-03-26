@@ -90,8 +90,8 @@ Cross-Encoder Reranking
 Grounded Generation / Structured Extraction / Filing Comparison
    ↓
 FastAPI Response + Streamlit UI
-
-API Endpoints
+```text
+## API Endpoints
 1. Ingest Filing
 
 POST /filings/ingest
