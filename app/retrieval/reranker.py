@@ -1,36 +1,36 @@
-import re
 from typing import List, Dict
+from sentence_transformers import CrossEncoder
 
 
-class SimpleReranker:
-    @staticmethod
-    def _tokenize(text: str) -> set[str]:
-        tokens = re.findall(r"\b[a-zA-Z]{3,}\b", text.lower())
-        return set(tokens)
+class CrossEncoderReranker:
+    _model = None
+
+    @classmethod
+    def _get_model(cls):
+        if cls._model is None:
+            cls._model = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
+        return cls._model
 
     @classmethod
     def rerank(cls, question: str, results: List[Dict], top_n: int = 5) -> List[Dict]:
-        q_tokens = cls._tokenize(question)
+        if not results:
+            return []
 
-        reranked = []
+        model = cls._get_model()
+
+        pairs = []
         for item in results:
             chunk_text = item.get("chunk_text", "")
-            section_title = (item.get("section_title") or "").lower()
+            section_title = item.get("section_title", "")
+            combined_text = f"Section: {section_title}\n{chunk_text}"
+            pairs.append((question, combined_text))
 
-            chunk_tokens = cls._tokenize(chunk_text)
-            overlap = len(q_tokens.intersection(chunk_tokens))
+        scores = model.predict(pairs)
 
-            section_bonus = 0.0
-            if "risk factors" in section_title and ("risk" in question.lower() or "competition" in question.lower()):
-                section_bonus += 0.08
-            if "management" in section_title and ("financial" in question.lower() or "results" in question.lower()):
-                section_bonus += 0.05
-
-            base_similarity = float(item.get("similarity", 0.0))
-            final_score = base_similarity + (0.01 * overlap) + section_bonus
-
+        reranked = []
+        for item, score in zip(results, scores):
             new_item = dict(item)
-            new_item["rerank_score"] = round(final_score, 6)
+            new_item["rerank_score"] = float(score)
             reranked.append(new_item)
 
         reranked.sort(key=lambda x: x["rerank_score"], reverse=True)

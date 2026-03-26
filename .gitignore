@@ -1,9 +1,31 @@
-.venv/
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+
+# Virtual env
+.venv/
+venv/
+
+# Environment variables
 .env
+
+# Streamlit cache
+.streamlit/
+
+# Data files
+data/raw_filings/*.html
+data/raw_filings/*.htm
+data/processed/
+*.sqlite3
+
+# OS / editor
 .vscode/
-data/raw_filings/*
-data/processed/*
-!data/raw_filings/.gitkeep
-!data/processed/.gitkeep
+.idea/
+.DS_Store
+Thumbs.db
+
+# Model cache (optional)
+.cache/

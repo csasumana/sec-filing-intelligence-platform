@@ -16,7 +16,6 @@ class IngestService:
         self.fetcher = SECFetcher()
         self.embedder = Embedder()
         self.vector_store = VectorStore()
-
     def _extract_metadata(self, raw_text: str, filing_url: str) -> Dict:
         company_name = None
         ticker = None
@@ -25,35 +24,69 @@ class IngestService:
         filing_date = None
         accession_number = None
 
-        # CIK from SEC URL
+    # CIK from SEC URL
         cik_match = re.search(r"/data/(\d+)/", filing_url)
         if cik_match:
-            cik = cik_match.group(1).lstrip("0") or cik_match.group(1)
+            cik_raw = cik_match.group(1)
+            cik = cik_raw.lstrip("0") or cik_raw
 
-        # Accession from SEC URL
+    # Accession from SEC URL
         accession_match = re.search(r"/data/\d+/(\d+)/", filing_url)
         if accession_match:
             accession_number = accession_match.group(1)
 
-        # Basic form type detection
-        if "10-K" in raw_text[:5000]:
+    # Form type detection
+        header_text = raw_text[:15000]
+        if "10-K" in header_text:
             form_type = "10-K"
-        elif "10-Q" in raw_text[:5000]:
+        elif "10-Q" in header_text:
             form_type = "10-Q"
 
-        # Try to extract filing date from filename pattern like aapl-20250927
-        file_match = re.search(r"([a-z]+)-(\d{8})", raw_text[:200])
+    # Filing filename pattern like aapl-20250927
+        file_match = re.search(r"([a-z]{1,6})-(\d{8})", raw_text[:500], flags=re.IGNORECASE)
         if file_match:
+            ticker_candidate = file_match.group(1).upper()
             date_str = file_match.group(2)
+
+            if 1 <= len(ticker_candidate) <= 6:
+                ticker = ticker_candidate
+
             try:
                 filing_date = datetime.strptime(date_str, "%Y%m%d").date()
             except ValueError:
                 pass
 
-        # Try to infer company from known text
-        if "Apple Inc." in raw_text[:3000]:
-            company_name = "Apple Inc."
-            ticker = "AAPL"
+    # Known-company heuristic (perfectly fine for curated MVP)
+        known_companies = {
+            "APPLE INC.": ("Apple Inc.", "AAPL"),
+            "MICROSOFT CORPORATION": ("Microsoft Corporation", "MSFT"),
+            "AMAZON.COM, INC.": ("Amazon.com, Inc.", "AMZN"),
+            "NVIDIA CORPORATION": ("NVIDIA Corporation", "NVDA"),
+            "TESLA, INC.": ("Tesla, Inc.", "TSLA"),
+            "META PLATFORMS, INC.": ("Meta Platforms, Inc.", "META"),
+            "ALPHABET INC.": ("Alphabet Inc.", "GOOGL"),
+        }
+
+        upper_header = header_text.upper()
+        for key, (name, tick) in known_companies.items():
+            if key in upper_header:
+                company_name = name
+                if not ticker:
+                    ticker = tick
+                break
+
+    # Fallback: infer from ticker if known
+        if ticker and not company_name:
+            reverse_map = {
+                "AAPL": "Apple Inc.",
+                "MSFT": "Microsoft Corporation",
+                "AMZN": "Amazon.com, Inc.",
+                "NVDA": "NVIDIA Corporation",
+                "TSLA": "Tesla, Inc.",
+                "META": "Meta Platforms, Inc.",
+                "GOOGL": "Alphabet Inc.",
+            }
+            company_name = reverse_map.get(ticker)
 
         filing_id = f"{ticker or 'unknown'}_{form_type or 'unknown'}_{accession_number or 'na'}"
 
@@ -66,7 +99,7 @@ class IngestService:
             "filing_date": filing_date,
             "accession_number": accession_number,
         }
-
+    
     def ingest_from_url(self, filing_url: str, output_filename: str) -> Dict:
         local_path = self.fetcher.download_filing_html(filing_url, output_filename)
 
@@ -75,7 +108,7 @@ class IngestService:
         sections = SectionSplitter.split_sections(raw_text)
 
         metadata = self._extract_metadata(raw_text, filing_url)
-
+        self.vector_store.delete_filing_data(metadata["filing_id"])
         # Save filing
         self.vector_store.insert_filing(
             filing_id=metadata["filing_id"],

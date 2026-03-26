@@ -7,6 +7,22 @@ from app.core.database import SessionLocal
 
 
 class VectorStore:
+    def delete_filing_data(self, filing_id: str):
+        with SessionLocal() as session:
+            session.execute(
+                text("DELETE FROM filing_chunks WHERE filing_id = :filing_id"),
+                {"filing_id": filing_id}
+            )
+            session.execute(
+                text("DELETE FROM filing_sections WHERE filing_id = :filing_id"),
+                {"filing_id": filing_id}
+            )
+            session.execute(
+                text("DELETE FROM filings WHERE filing_id = :filing_id"),
+                {"filing_id": filing_id}
+            )
+            session.commit()
+
     def insert_filing(
         self,
         filing_id: str,
@@ -31,16 +47,6 @@ class VectorStore:
                         :filing_id, :company_name, :ticker, :cik, :form_type,
                         :filing_date, :accession_number, :source_url, :local_path, :raw_text
                     )
-                    ON CONFLICT (filing_id) DO UPDATE SET
-                        company_name = EXCLUDED.company_name,
-                        ticker = EXCLUDED.ticker,
-                        cik = EXCLUDED.cik,
-                        form_type = EXCLUDED.form_type,
-                        filing_date = EXCLUDED.filing_date,
-                        accession_number = EXCLUDED.accession_number,
-                        source_url = EXCLUDED.source_url,
-                        local_path = EXCLUDED.local_path,
-                        raw_text = EXCLUDED.raw_text
                 """),
                 {
                     "filing_id": filing_id,
@@ -162,6 +168,7 @@ class VectorStore:
             result = session.execute(sql, params)
             rows = result.mappings().all()
             return [dict(row) for row in rows]
+
     def search_similar_chunks_for_rag(
         self,
         query_embedding: List[float],
